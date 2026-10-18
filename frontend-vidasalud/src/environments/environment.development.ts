@@ -7,5 +7,7 @@ export const environment = {
     redirectUri: 'http://localhost:4200',
     scopes: ['api://dc14e643-0c78-4e26-96ea-8ca8c601ad3e/OT.Create'] // Scope de ms-vidasalud-backend
   },
-  apiGatewayUrl: 'http://localhost:8080'
+  apiGatewayUrl: 'http://3.215.109.69:8080',
+  awsApiGatewayUrl: 'https://kr4o4wric2.execute-api.us-east-1.amazonaws.com',
+  ec2DirectUrl: 'http://3.215.109.69:8080'
 };

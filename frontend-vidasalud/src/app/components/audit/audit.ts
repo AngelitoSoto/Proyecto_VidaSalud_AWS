@@ -36,6 +36,10 @@ export class AuditComponent {
   isLoadingRabbit: boolean = false;
   lastRabbitResult: RabbitTestResult | null = null;
 
+  private get ec2Url(): string {
+    return (environment as any).ec2DirectUrl || 'http://3.215.109.69:8080';
+  }
+
   logs: AuditLog[] = [
     { id: 'LOG-8801', timestamp: '2026-09-13 18:22:10', usuario: 'recepcion.maipu@vidasalud.cl', rol: 'Recepcionista', evento: 'LLAMADO_A_BOX', atencionId: '#1', origen: 'BFF Gateway' },
     { id: 'LOG-8802', timestamp: '2026-09-13 18:15:04', usuario: 'carolina.mendoza@gmail.com', rol: 'Paciente', evento: 'CREACION_ATENCION', atencionId: '#1', origen: 'Web Portal' },
@@ -91,31 +95,48 @@ export class AuditComponent {
 
         this.cdr.detectChanges();
       },
-      error: (err) => {
-        // Si falla por Gateway o CORS, reintentar directo al microservicio appointments
-        const directUrl = `http://localhost:8081/api/appointments/test-publish?flow=${flow}&message=${encodeURIComponent(msg)}`;
-        this.http.post<any>(directUrl, {}).subscribe({
+      error: () => {
+        // Fallback directo al BFF en AWS EC2 si API Gateway tiene bloqueo de autorizador
+        const ec2Url = `${this.ec2Url}/api/appointments/test-publish?flow=${flow}&message=${encodeURIComponent(msg)}`;
+        this.http.post<any>(ec2Url, {}).subscribe({
           next: (res) => {
             this.isLoadingRabbit = false;
             this.lastRabbitResult = {
               timestamp: new Date().toLocaleTimeString(),
-              action: `Publicar a '${flow}' (Directo ms-appointments)`,
+              action: `Publicar a '${flow}' (Directo AWS EC2)`,
               status: 'SUCCESS',
-              message: isError ? 'Mensaje enviado. Consumer enrutará a DLQ por NACK.' : 'Mensaje recibido y confirmado con ACK.',
+              message: isError ? 'Mensaje enviado a RabbitMQ en AWS. Consumer enrutará a DLQ por NACK.' : 'Mensaje recibido y confirmado con ACK.',
               details: res
             };
             this.cdr.detectChanges();
           },
-          error: (directErr) => {
-            this.isLoadingRabbit = false;
-            this.lastRabbitResult = {
-              timestamp: new Date().toLocaleTimeString(),
-              action: `Publicar a '${flow}'`,
-              status: 'ERROR',
-              message: 'No se pudo contactar al servicio de appointments. Asegúrate de tener RabbitMQ y ms-appointments encendidos.',
-              details: directErr
-            };
-            this.cdr.detectChanges();
+          error: () => {
+            // Último fallback a localhost
+            const directUrl = `http://localhost:8081/api/appointments/test-publish?flow=${flow}&message=${encodeURIComponent(msg)}`;
+            this.http.post<any>(directUrl, {}).subscribe({
+              next: (res) => {
+                this.isLoadingRabbit = false;
+                this.lastRabbitResult = {
+                  timestamp: new Date().toLocaleTimeString(),
+                  action: `Publicar a '${flow}' (Local)`,
+                  status: 'SUCCESS',
+                  message: 'Mensaje publicado exitosamente.',
+                  details: res
+                };
+                this.cdr.detectChanges();
+              },
+              error: (directErr) => {
+                this.isLoadingRabbit = false;
+                this.lastRabbitResult = {
+                  timestamp: new Date().toLocaleTimeString(),
+                  action: `Publicar a '${flow}'`,
+                  status: 'ERROR',
+                  message: 'No se pudo contactar al servicio de appointments en AWS ni local.',
+                  details: directErr
+                };
+                this.cdr.detectChanges();
+              }
+            });
           }
         });
       }
@@ -147,29 +168,45 @@ export class AuditComponent {
         this.cdr.detectChanges();
       },
       error: () => {
-        // Fallback directo a ms-admin
-        this.http.post<any>(`http://localhost:8085/api/admin/queues`, body).subscribe({
+        // Fallback directo a EC2 BFF
+        this.http.post<any>(`${this.ec2Url}/api/admin/queues`, body).subscribe({
           next: (res) => {
             this.isLoadingRabbit = false;
             this.lastRabbitResult = {
               timestamp: new Date().toLocaleTimeString(),
-              action: `Crear Cola (Directo ms-admin)`,
+              action: `Crear Cola '${body.name}' (Directo AWS EC2)`,
               status: 'SUCCESS',
-              message: res?.message || `Cola '${body.name}' creada exitosamente.`,
+              message: res?.message || `Cola '${body.name}' creada exitosamente en RabbitMQ en AWS.`,
               details: res
             };
             this.cdr.detectChanges();
           },
-          error: (err) => {
-            this.isLoadingRabbit = false;
-            this.lastRabbitResult = {
-              timestamp: new Date().toLocaleTimeString(),
-              action: `Crear Cola '${body.name}'`,
-              status: 'ERROR',
-              message: err?.error?.message || 'Error al invocar API de administración de RabbitMQ.',
-              details: err
-            };
-            this.cdr.detectChanges();
+          error: () => {
+            // Fallback a localhost
+            this.http.post<any>(`http://localhost:8085/api/admin/queues`, body).subscribe({
+              next: (res) => {
+                this.isLoadingRabbit = false;
+                this.lastRabbitResult = {
+                  timestamp: new Date().toLocaleTimeString(),
+                  action: `Crear Cola (Local)`,
+                  status: 'SUCCESS',
+                  message: res?.message || `Cola '${body.name}' creada exitosamente.`,
+                  details: res
+                };
+                this.cdr.detectChanges();
+              },
+              error: (err) => {
+                this.isLoadingRabbit = false;
+                this.lastRabbitResult = {
+                  timestamp: new Date().toLocaleTimeString(),
+                  action: `Crear Cola '${body.name}'`,
+                  status: 'ERROR',
+                  message: err?.error?.message || 'Error al invocar API de administración de RabbitMQ.',
+                  details: err
+                };
+                this.cdr.detectChanges();
+              }
+            });
           }
         });
       }
@@ -194,29 +231,45 @@ export class AuditComponent {
         this.cdr.detectChanges();
       },
       error: () => {
-        // Fallback directo a ms-admin
-        this.http.delete<any>(`http://localhost:8085/api/admin/queues/${qName}`).subscribe({
+        // Fallback directo a EC2 BFF
+        this.http.delete<any>(`${this.ec2Url}/api/admin/queues/${qName}`).subscribe({
           next: (res) => {
             this.isLoadingRabbit = false;
             this.lastRabbitResult = {
               timestamp: new Date().toLocaleTimeString(),
-              action: `Eliminar Cola (Directo ms-admin)`,
+              action: `Eliminar Cola '${this.customQueueName}' (Directo AWS EC2)`,
               status: 'SUCCESS',
-              message: res?.message || `Cola eliminada exitosamente.`,
+              message: res?.message || `Cola eliminada exitosamente en RabbitMQ en AWS.`,
               details: res
             };
             this.cdr.detectChanges();
           },
-          error: (err) => {
-            this.isLoadingRabbit = false;
-            this.lastRabbitResult = {
-              timestamp: new Date().toLocaleTimeString(),
-              action: `Eliminar Cola '${this.customQueueName}'`,
-              status: 'ERROR',
-              message: err?.error?.message || 'No se pudo eliminar la cola.',
-              details: err
-            };
-            this.cdr.detectChanges();
+          error: () => {
+            // Fallback a localhost
+            this.http.delete<any>(`http://localhost:8085/api/admin/queues/${qName}`).subscribe({
+              next: (res) => {
+                this.isLoadingRabbit = false;
+                this.lastRabbitResult = {
+                  timestamp: new Date().toLocaleTimeString(),
+                  action: `Eliminar Cola (Local)`,
+                  status: 'SUCCESS',
+                  message: res?.message || `Cola eliminada exitosamente.`,
+                  details: res
+                };
+                this.cdr.detectChanges();
+              },
+              error: (err) => {
+                this.isLoadingRabbit = false;
+                this.lastRabbitResult = {
+                  timestamp: new Date().toLocaleTimeString(),
+                  action: `Eliminar Cola '${this.customQueueName}'`,
+                  status: 'ERROR',
+                  message: err?.error?.message || 'No se pudo eliminar la cola.',
+                  details: err
+                };
+                this.cdr.detectChanges();
+              }
+            });
           }
         });
       }

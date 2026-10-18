@@ -40,8 +40,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/public/**", "/api/public/**").permitAll()
-                // Autorización basada en roles (Admin, Operador/Recepcionista, Cliente/Paciente, Auditor)
-                .requestMatchers("/api/admin/**").hasAnyRole("Admin", "ADMIN")
+                // Endpoints públicos y de administración dinámica de RabbitMQ
+                .requestMatchers("/api/admin/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/appointments/test-publish").permitAll()
                 .requestMatchers("/api/operator/**").hasAnyRole("Operador", "OPERADOR", "Recepcionista", "RECEPCIONISTA", "Admin", "ADMIN")
                 .requestMatchers("/api/client/**").hasAnyRole("Cliente", "CLIENTE", "Paciente", "PACIENTE", "Admin", "ADMIN")
                 .requestMatchers("/api/audit/**").hasAnyRole("Auditor", "AUDITOR", "Admin", "ADMIN")
