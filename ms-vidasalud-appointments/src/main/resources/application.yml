@@ -1,0 +1,55 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: ms-vidasalud-appointments
+  datasource:
+    url: jdbc:h2:mem:vidasalud_appointments_db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driverClassName: org.h2.Driver
+    username: sa
+    password: 
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+
+logging:
+  level:
+    cl.duoc.vidasalud: DEBUG
+
+app:
+  rabbitmq:
+    exchanges:
+      topic: cmd.topic
+      direct: cmd.direct
+      dlx: cmd.dead.dlx
+    queues:
+      email: q.cmd.email
+      email-dlq: q.cmd.email.dlq
+      admission: q.cmd.admission
+      admission-dlq: q.cmd.admission.dlq
+      record: q.cmd.record
+      record-dlq: q.cmd.record.dlq
+    routing-keys:
+      email-topic: "email.*"
+      email-direct: email.send
+      email-dlq: email.dlq
+      admission-topic: "admission.#"
+      admission-direct: admission.ticket
+      admission-dlq: admission.dlq
+      record-topic: "record.*"
+      record-direct: record.gen
+      record-dlq: record.dlq

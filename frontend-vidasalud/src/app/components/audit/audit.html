@@ -1,0 +1,116 @@
+<div class="audit-page">
+  <div class="vs-header-actions">
+    <div>
+      <h2>Auditoría & Mensajería Asíncrona RabbitMQ</h2>
+      <p>Panel de control para la Evaluación Parcial 3: Publicación de eventos, confirmaciones ACK/NACK, Dead Letter Queues (DLQ) y Administración Dinámica de Colas.</p>
+    </div>
+    <div class="vs-header-btns">
+      <button class="vs-btn vs-btn-secondary" (click)="openRabbitMqManagement()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+        Consola RabbitMQ (15672)
+      </button>
+    </div>
+  </div>
+
+  <!-- PANEL DE PRUEBAS DE MENSAJERÍA ASÍNCRONA (EVALUACIÓN 3) -->
+  <div class="rabbit-test-card vs-card">
+    <div class="rabbit-card-header">
+      <div class="rabbit-title-group">
+        <span class="rabbit-badge">RabbitMQ AMQP 0-9-1</span>
+        <h3>Consola de Pruebas: Publicación & Manejo de Errores (ACK / DLQ)</h3>
+      </div>
+      <span *ngIf="isLoadingRabbit" class="loading-tag">Ejecutando operación...</span>
+    </div>
+
+    <div class="rabbit-actions-grid">
+      <!-- Columna 1: Publicación de Eventos -->
+      <div class="rabbit-action-box">
+        <h4>1. Publicar Eventos de Dominio</h4>
+        <p class="rabbit-action-desc">Dispara eventos desde <code>ms-appointments</code> enrutados a través de exchanges a <code>ms-notify</code>.</p>
+        
+        <div class="button-group-wrap">
+          <button class="vs-btn vs-btn-success vs-btn-sm" [disabled]="isLoadingRabbit" (click)="publishEvent('email', false)">
+            Publicar Email (Éxito -> ACK)
+          </button>
+          <button class="vs-btn vs-btn-danger vs-btn-sm" [disabled]="isLoadingRabbit" (click)="publishEvent('email', true)">
+            Simular Fallo Email (-> DLQ)
+          </button>
+          <button class="vs-btn vs-btn-secondary vs-btn-sm" [disabled]="isLoadingRabbit" (click)="publishEvent('admission', false)">
+            Topic: Admisión Cita
+          </button>
+          <button class="vs-btn vs-btn-secondary vs-btn-sm" [disabled]="isLoadingRabbit" (click)="publishEvent('record', false)">
+            Topic: Ficha Clínica
+          </button>
+        </div>
+      </div>
+
+      <!-- Columna 2: Administración Dinámica de Colas -->
+      <div class="rabbit-action-box">
+        <h4>2. Administración Dinámica (ms-admin)</h4>
+        <p class="rabbit-action-desc">Crear y eliminar colas, exchanges y bindings dinámicamente mediante <code>RabbitAdminService</code>.</p>
+
+        <div class="queue-admin-controls">
+          <input type="text" class="vs-input vs-input-sm" [(ngModel)]="customQueueName" placeholder="Nombre de cola (ej: q.cmd.prueba)">
+          <div class="btn-row">
+            <button class="vs-btn vs-btn-primary vs-btn-sm" [disabled]="isLoadingRabbit" (click)="createDynamicQueue()">
+              Crear Cola
+            </button>
+            <button class="vs-btn vs-btn-danger-outline vs-btn-sm" [disabled]="isLoadingRabbit" (click)="deleteDynamicQueue()">
+              Eliminar Cola
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback / Resultado de la Operación -->
+    <div *ngIf="lastRabbitResult" class="rabbit-feedback" [class.success]="lastRabbitResult.status === 'SUCCESS'" [class.error]="lastRabbitResult.status === 'ERROR'">
+      <div class="feedback-header">
+        <strong>[{{ lastRabbitResult.timestamp }}] {{ lastRabbitResult.action }}</strong>
+        <span class="status-indicator">{{ lastRabbitResult.status }}</span>
+      </div>
+      <p class="feedback-msg">{{ lastRabbitResult.message }}</p>
+      <pre *ngIf="lastRabbitResult.details" class="feedback-json">{{ lastRabbitResult.details | json }}</pre>
+    </div>
+  </div>
+
+  <!-- TABLA DE HISTORIAL DE AUDITORÍA -->
+  <div class="vs-header-actions" style="margin-top: 1rem;">
+    <div>
+      <h3>Trazabilidad de Eventos & Auditoría</h3>
+      <p>Historial de transacciones procesadas por el sistema.</p>
+    </div>
+    <div class="vs-search-box">
+      <input type="text" class="vs-input" [(ngModel)]="searchTerm" placeholder="Buscar por usuario, evento o ID...">
+    </div>
+  </div>
+
+  <div class="vs-table-container">
+    <table class="vs-table">
+      <thead>
+        <tr>
+          <th>ID Audit</th>
+          <th>Fecha / Hora</th>
+          <th>Usuario / Origen</th>
+          <th>Rol</th>
+          <th>Tipo de Evento</th>
+          <th>Ref. Atención</th>
+          <th>Exchange / Origen</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let log of filteredLogs">
+          <td><strong>{{ log.id }}</strong></td>
+          <td class="text-dim" style="font-size: 0.8rem;">{{ log.timestamp }}</td>
+          <td class="font-bold">{{ log.usuario }}</td>
+          <td><span class="role-badge">{{ log.rol }}</span></td>
+          <td>
+            <span class="event-chip" [class.event-error]="log.evento.includes('NACK') || log.evento.includes('DLQ')">{{ log.evento }}</span>
+          </td>
+          <td><strong>{{ log.atencionId }}</strong></td>
+          <td><span class="origin-tag">{{ log.origen }}</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
