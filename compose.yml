@@ -104,19 +104,6 @@ services:
       - vidasalud-network
     restart: unless-stopped
 
-  frontend-vidasalud:
-    build:
-      context: ./frontend-vidasalud
-      dockerfile: Dockerfile
-    container_name: frontend-vidasalud
-    ports:
-      - "4200:80"
-    depends_on:
-      - ms-vidasalud-bff
-    networks:
-      - vidasalud-network
-    restart: unless-stopped
-
 networks:
   vidasalud-network:
     driver: bridge
